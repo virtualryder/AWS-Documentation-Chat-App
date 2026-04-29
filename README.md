@@ -232,4 +232,4 @@ python -m ingestion.ingest_pipeline --all --max-pages 20
 
 ## License
 
-MIT
+
