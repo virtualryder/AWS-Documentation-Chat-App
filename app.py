@@ -117,7 +117,12 @@ with st.sidebar:
     col2.metric("Sources", len(sources))
 
     if st.session_state.kb_count == 0:
-        st.warning("Knowledge base is empty. Ingest documentation below.")
+        st.info(
+            "⏳ **Initial indexing in progress.**\n\n"
+            "All 30 primary AWS services are being indexed in the background "
+            "(first boot only — ~15–20 min). Click **Refresh KB** below to "
+            "check progress. You can still use the chat once chunks appear."
+        )
     else:
         st.success("Knowledge base ready")
         if sources:
