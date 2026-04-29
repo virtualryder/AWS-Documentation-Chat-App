@@ -30,52 +30,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ── Primary services to index on first boot ────────────────────────────────────
-# All Tier 1 (official AWS product documentation).
-# Ordered roughly by how frequently they appear in architecture conversations.
+from scraper.aws_doc_urls import PRIMARY_SEED_KEYS
 
-DEFAULT_SEED_KEYS = [
-    # Compute & Containers
-    "lambda",
-    "ec2",
-    "ecs",
-    "eks",
-    # Storage
-    "s3",
-    "efs",
-    # Databases
-    "rds",
-    "dynamodb",
-    "redshift",
-    "elasticache",
-    # Networking
-    "vpc",
-    "route53",
-    "cloudfront",
-    "api_gateway",
-    # Security & Identity
-    "iam",
-    "kms",
-    "cognito",
-    "guardduty",
-    # Analytics & Data
-    "glue",
-    "kinesis",
-    "athena",
-    # Messaging & Integration
-    "sqs",
-    "sns",
-    "eventbridge",
-    "step_functions",
-    # AI / ML
-    "sagemaker",
-    "bedrock",
-    "bedrock_agentcore",
-    # DevOps & Management
-    "cloudformation",
-    "cloudwatch",
-    "cloudtrail",
-]
+DEFAULT_SEED_KEYS = PRIMARY_SEED_KEYS
 
 # Pages per service — 20 gives good coverage of each service's core content.
 # Lower this to 10 if you need faster cold starts.

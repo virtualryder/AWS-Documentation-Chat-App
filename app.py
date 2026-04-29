@@ -141,47 +141,84 @@ with st.sidebar:
 
     st.divider()
 
-    # ── Ingestion section ─────────────────────────────────────────────────
-    st.subheader("Ingest Documentation")
-    st.caption("Select topics to download and index from AWS documentation sites.")
+    # ── Auto-indexed services (read-only) ─────────────────────────────────
+    from scraper.aws_doc_urls import SEED_URLS
 
-    with st.expander("Select Topics / Services", expanded=st.session_state.kb_count == 0):
-        from scraper.aws_doc_urls import SEED_URLS, TOPIC_KEYWORD_MAP
+    AUTO_INDEXED_DISPLAY = {
+        "Compute":   ["Lambda", "EC2", "ECS", "EKS"],
+        "Storage":   ["S3", "EFS"],
+        "Databases": ["RDS", "DynamoDB", "Redshift", "ElastiCache"],
+        "Networking":["VPC", "Route 53", "CloudFront", "API Gateway"],
+        "Security":  ["IAM", "KMS", "Cognito", "GuardDuty"],
+        "Analytics": ["Glue", "Kinesis", "Athena"],
+        "Messaging": ["SQS", "SNS", "EventBridge", "Step Functions"],
+        "AI / ML":   ["SageMaker", "Bedrock", "Bedrock AgentCore"],
+        "DevOps":    ["CloudFormation", "CloudWatch", "CloudTrail"],
+    }
 
-        # Group seeds by category for a cleaner UI
-        CATEGORIES = {
-            "Compute & Containers": ["lambda", "ec2", "ecs", "eks"],
-            "Storage": ["s3", "efs"],
-            "Databases": ["rds", "dynamodb", "redshift", "elasticache"],
-            "Networking": ["vpc", "route53", "cloudfront", "api_gateway"],
-            "Security & Identity": ["iam", "kms", "cognito", "guardduty"],
-            "Analytics & Data": ["glue", "kinesis", "athena"],
-            "Messaging & Integration": ["sqs", "sns", "eventbridge", "step_functions"],
-            "AI / ML": ["sagemaker", "bedrock", "bedrock_agentcore"],
-            "DevOps & Management": ["cloudformation", "cloudwatch", "cloudtrail"],
-            "Special Sources": ["prescriptive_guidance", "solutions_library", "reference_architecture"],
-        }
+    with st.expander("✅ 30 core services — auto-indexed & stored in Postgres", expanded=False):
+        st.caption(
+            "These are indexed once on first boot and stay in the database permanently. "
+            "A background job refreshes them weekly. No action needed."
+        )
+        for cat, svcs in AUTO_INDEXED_DISPLAY.items():
+            st.caption(f"**{cat}:** " + " · ".join(svcs))
 
-        selected_keys: list[str] = []
-        for category, keys in CATEGORIES.items():
-            with st.container():
-                st.markdown(f"**{category}**")
-                cols = st.columns(2)
-                for i, key in enumerate(keys):
-                    info = SEED_URLS.get(key, {})
-                    label = info.get("name", key).replace(" Developer Guide", "").replace(" User Guide", "").replace(" Documentation", "")
-                    if cols[i % 2].checkbox(label, key=f"chk_{key}"):
-                        selected_keys.append(key)
+        st.caption(
+            "ℹ️ **Other AWS services** (250+) are handled via live page fetch — "
+            "the agent reads the official docs.aws.amazon.com page on-demand when "
+            "you ask about a service that isn't in the knowledge base."
+        )
+
+    st.divider()
+
+    # ── Optional additional sources ───────────────────────────────────────
+    st.subheader("Add More Documentation")
+    st.caption(
+        "Index extended AWS services not included by default. "
+        "Each service adds ~4–6 min."
+    )
+
+    OPTIONAL_CATEGORIES = {
+        "Extended AI / ML": [
+            "comprehend", "rekognition", "transcribe", "textract",
+            "polly", "translate", "lex", "forecast", "personalize",
+        ],
+        "Extended Analytics": ["emr", "quicksight", "opensearch"],
+        "Extended DevOps": ["codebuild", "codepipeline", "codecommit", "cdk"],
+        "Extended Security": ["securityhub", "waf", "organizations", "systems_manager"],
+        "Extended Storage & Transfer": ["fsx", "transfer", "datasync"],
+        "Guidance & Solutions (Tier 2/3)": [
+            "prescriptive_guidance", "solutions_library", "reference_architecture",
+        ],
+    }
+
+    selected_keys: list[str] = []
+    with st.expander("Select additional services", expanded=False):
+        for category, keys in OPTIONAL_CATEGORIES.items():
+            st.markdown(f"**{category}**")
+            cols = st.columns(2)
+            for i, key in enumerate(keys):
+                info = SEED_URLS.get(key, {})
+                label = (
+                    info.get("name", key)
+                    .replace(" Developer Guide", "")
+                    .replace(" User Guide", "")
+                    .replace(" Management Guide", "")
+                    .replace(" Documentation", "")
+                )
+                if cols[i % 2].checkbox(label, key=f"chk_{key}"):
+                    selected_keys.append(key)
 
         st.markdown("---")
         custom_topics = st.text_input(
-            "Or type topic keywords",
-            placeholder="e.g. serverless, data lake, security",
-            help="Comma-separated topics — mapped to the most relevant seed URLs.",
+            "Or enter keywords",
+            placeholder="e.g. nlp, big data, ci/cd",
+            help="Comma-separated — mapped to the most relevant seed URLs.",
         )
 
         max_pages = st.slider(
-            "Max pages per topic",
+            "Max pages per service",
             min_value=5,
             max_value=100,
             value=20,
@@ -189,40 +226,33 @@ with st.sidebar:
             help="More pages = better coverage but slower ingestion.",
         )
 
-        save_to_disk = st.checkbox(
-            "Save markdown to docs/ folder",
-            value=True,
-            help="Keeps a dated copy of everything downloaded.",
-        )
-
-    ingest_btn = st.button("Fetch & Index Documentation", type="primary", use_container_width=True)
+    ingest_btn = st.button(
+        "Fetch & Index Selected" if selected_keys or custom_topics else "Select services above to index",
+        type="primary",
+        use_container_width=True,
+        disabled=not selected_keys and not custom_topics,
+    )
 
     if ingest_btn:
-        # Resolve custom topic keywords to seed keys
         final_keys = list(selected_keys)
         if custom_topics:
             from ingestion.ingest_pipeline import resolve_seed_keys
             topic_list = [t.strip() for t in custom_topics.split(",") if t.strip()]
-            resolved = resolve_seed_keys(topic_list)
-            final_keys.extend(resolved)
+            final_keys.extend(resolve_seed_keys(topic_list))
 
-        # Deduplicate
         final_keys = list(dict.fromkeys(final_keys))
 
-        if not final_keys:
-            st.sidebar.warning("Select at least one topic or enter keywords.")
-        else:
-            with st.spinner(f"Ingesting {len(final_keys)} topic(s)..."):
-                summary = run_ingestion(final_keys, max_pages, save_to_disk)
+        with st.spinner(f"Ingesting {len(final_keys)} service(s)…"):
+            summary = run_ingestion(final_keys, max_pages, save_to_disk=False)
 
-            refresh_kb_count()
-            st.sidebar.success(
-                f"Done! {summary['chunks_indexed']:,} chunks indexed "
-                f"from {summary['pages_scraped']} pages."
-            )
-            if summary["skipped"]:
-                st.sidebar.warning(f"Skipped: {', '.join(summary['skipped'])}")
-            st.rerun()
+        refresh_kb_count()
+        st.sidebar.success(
+            f"Done! {summary['chunks_indexed']:,} chunks indexed "
+            f"from {summary['pages_scraped']} pages."
+        )
+        if summary["skipped"]:
+            st.sidebar.warning(f"Skipped: {', '.join(summary['skipped'])}")
+        st.rerun()
 
     st.divider()
 

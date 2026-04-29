@@ -298,6 +298,149 @@ SEED_URLS = {
         "source_label": "AWS Reference Architecture",
         "tier": 2,
     },
+    # ── Extended AI / ML ───────────────────────────────────────────────────
+    "comprehend": {
+        "name": "Amazon Comprehend Developer Guide",
+        "url": "https://docs.aws.amazon.com/comprehend/latest/dg/what-is.html",
+        "source_label": "AWS Documentation",
+        "tier": 1,
+    },
+    "rekognition": {
+        "name": "Amazon Rekognition Developer Guide",
+        "url": "https://docs.aws.amazon.com/rekognition/latest/dg/what-is.html",
+        "source_label": "AWS Documentation",
+        "tier": 1,
+    },
+    "transcribe": {
+        "name": "Amazon Transcribe Developer Guide",
+        "url": "https://docs.aws.amazon.com/transcribe/latest/dg/what-is.html",
+        "source_label": "AWS Documentation",
+        "tier": 1,
+    },
+    "textract": {
+        "name": "Amazon Textract Developer Guide",
+        "url": "https://docs.aws.amazon.com/textract/latest/dg/what-is-textract.html",
+        "source_label": "AWS Documentation",
+        "tier": 1,
+    },
+    "polly": {
+        "name": "Amazon Polly Developer Guide",
+        "url": "https://docs.aws.amazon.com/polly/latest/dg/what-is.html",
+        "source_label": "AWS Documentation",
+        "tier": 1,
+    },
+    "translate": {
+        "name": "Amazon Translate Developer Guide",
+        "url": "https://docs.aws.amazon.com/translate/latest/dg/what-is.html",
+        "source_label": "AWS Documentation",
+        "tier": 1,
+    },
+    "lex": {
+        "name": "Amazon Lex Developer Guide",
+        "url": "https://docs.aws.amazon.com/lexv2/latest/dg/what-is.html",
+        "source_label": "AWS Documentation",
+        "tier": 1,
+    },
+    "forecast": {
+        "name": "Amazon Forecast Developer Guide",
+        "url": "https://docs.aws.amazon.com/forecast/latest/dg/what-is-forecast.html",
+        "source_label": "AWS Documentation",
+        "tier": 1,
+    },
+    "personalize": {
+        "name": "Amazon Personalize Developer Guide",
+        "url": "https://docs.aws.amazon.com/personalize/latest/dg/what-is-personalize.html",
+        "source_label": "AWS Documentation",
+        "tier": 1,
+    },
+    # ── Extended Analytics ─────────────────────────────────────────────────
+    "emr": {
+        "name": "Amazon EMR Management Guide",
+        "url": "https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-what-is-emr.html",
+        "source_label": "AWS Documentation",
+        "tier": 1,
+    },
+    "quicksight": {
+        "name": "Amazon QuickSight User Guide",
+        "url": "https://docs.aws.amazon.com/quicksight/latest/user/welcome.html",
+        "source_label": "AWS Documentation",
+        "tier": 1,
+    },
+    "opensearch": {
+        "name": "Amazon OpenSearch Service Developer Guide",
+        "url": "https://docs.aws.amazon.com/opensearch-service/latest/developerguide/what-is.html",
+        "source_label": "AWS Documentation",
+        "tier": 1,
+    },
+    # ── Extended DevOps ────────────────────────────────────────────────────
+    "codebuild": {
+        "name": "AWS CodeBuild User Guide",
+        "url": "https://docs.aws.amazon.com/codebuild/latest/userguide/welcome.html",
+        "source_label": "AWS Documentation",
+        "tier": 1,
+    },
+    "codepipeline": {
+        "name": "AWS CodePipeline User Guide",
+        "url": "https://docs.aws.amazon.com/codepipeline/latest/userguide/welcome.html",
+        "source_label": "AWS Documentation",
+        "tier": 1,
+    },
+    "codecommit": {
+        "name": "AWS CodeCommit User Guide",
+        "url": "https://docs.aws.amazon.com/codecommit/latest/userguide/welcome.html",
+        "source_label": "AWS Documentation",
+        "tier": 1,
+    },
+    "cdk": {
+        "name": "AWS CDK Developer Guide",
+        "url": "https://docs.aws.amazon.com/cdk/v2/guide/home.html",
+        "source_label": "AWS Documentation",
+        "tier": 1,
+    },
+    # ── Extended Security ──────────────────────────────────────────────────
+    "securityhub": {
+        "name": "AWS Security Hub User Guide",
+        "url": "https://docs.aws.amazon.com/securityhub/latest/userguide/what-is-securityhub.html",
+        "source_label": "AWS Documentation",
+        "tier": 1,
+    },
+    "waf": {
+        "name": "AWS WAF Developer Guide",
+        "url": "https://docs.aws.amazon.com/waf/latest/developerguide/waf-chapter.html",
+        "source_label": "AWS Documentation",
+        "tier": 1,
+    },
+    "organizations": {
+        "name": "AWS Organizations User Guide",
+        "url": "https://docs.aws.amazon.com/organizations/latest/userguide/orgs_introduction.html",
+        "source_label": "AWS Documentation",
+        "tier": 1,
+    },
+    "systems_manager": {
+        "name": "AWS Systems Manager User Guide",
+        "url": "https://docs.aws.amazon.com/systems-manager/latest/userguide/what-is-systems-manager.html",
+        "source_label": "AWS Documentation",
+        "tier": 1,
+    },
+    # ── Extended Storage & Transfer ────────────────────────────────────────
+    "fsx": {
+        "name": "Amazon FSx for Windows File Server",
+        "url": "https://docs.aws.amazon.com/fsx/latest/WindowsGuide/what-is.html",
+        "source_label": "AWS Documentation",
+        "tier": 1,
+    },
+    "transfer": {
+        "name": "AWS Transfer Family User Guide",
+        "url": "https://docs.aws.amazon.com/transfer/latest/userguide/what-is-aws-transfer-family.html",
+        "source_label": "AWS Documentation",
+        "tier": 1,
+    },
+    "datasync": {
+        "name": "AWS DataSync User Guide",
+        "url": "https://docs.aws.amazon.com/datasync/latest/userguide/what-is-datasync.html",
+        "source_label": "AWS Documentation",
+        "tier": 1,
+    },
 }
 
 # Maps topic keywords typed by the user to one or more seed keys.
@@ -323,4 +466,57 @@ TOPIC_KEYWORD_MAP = {
     "messaging": ["sqs", "sns", "eventbridge"],
     "api": ["api_gateway", "lambda"],
     "migration": ["prescriptive_guidance"],
+    "nlp": ["comprehend", "lex", "transcribe", "translate"],
+    "vision": ["rekognition", "textract"],
+    "speech": ["polly", "transcribe"],
+    "big data": ["emr", "glue", "athena", "redshift"],
+    "search": ["opensearch"],
+    "ci/cd": ["codebuild", "codepipeline", "codecommit"],
+    "infrastructure as code": ["cloudformation", "cdk"],
+    "compliance": ["securityhub", "cloudtrail", "organizations"],
+    "file transfer": ["transfer", "datasync"],
+    "windows": ["fsx"],
 }
+
+# ── Canonical seed-key groupings ──────────────────────────────────────────────
+
+# Automatically indexed at boot by startup_ingest.py.
+# Stored in Postgres — persists across all Railway restarts and redeployments.
+PRIMARY_SEED_KEYS: list[str] = [
+    # Compute & Containers
+    "lambda", "ec2", "ecs", "eks",
+    # Storage
+    "s3", "efs",
+    # Databases
+    "rds", "dynamodb", "redshift", "elasticache",
+    # Networking
+    "vpc", "route53", "cloudfront", "api_gateway",
+    # Security & Identity
+    "iam", "kms", "cognito", "guardduty",
+    # Analytics & Data
+    "glue", "kinesis", "athena",
+    # Messaging & Integration
+    "sqs", "sns", "eventbridge", "step_functions",
+    # AI / ML
+    "sagemaker", "bedrock", "bedrock_agentcore",
+    # DevOps & Management
+    "cloudformation", "cloudwatch", "cloudtrail",
+]
+
+# Available for optional manual ingestion via the sidebar.
+# Grouped for UI display — order matches OPTIONAL_CATEGORIES in app.py.
+OPTIONAL_SEED_KEYS: list[str] = [
+    # Extended AI / ML
+    "comprehend", "rekognition", "transcribe", "textract",
+    "polly", "translate", "lex", "forecast", "personalize",
+    # Extended Analytics
+    "emr", "quicksight", "opensearch",
+    # Extended DevOps
+    "codebuild", "codepipeline", "codecommit", "cdk",
+    # Extended Security
+    "securityhub", "waf", "organizations", "systems_manager",
+    # Extended Storage & Transfer
+    "fsx", "transfer", "datasync",
+    # Guidance & Solutions
+    "prescriptive_guidance", "solutions_library", "reference_architecture",
+]
