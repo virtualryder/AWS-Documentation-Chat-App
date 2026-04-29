@@ -1,6 +1,6 @@
 """
 Orchestrates the full ingestion pipeline:
-  scrape → chunk → embed → upsert into ChromaDB → save to disk
+  scrape → chunk → embed → upsert into PostgreSQL (pgvector) → save to disk
 
 Can be run directly:
     python -m ingestion.ingest_pipeline --topics lambda s3 --max-pages 20
@@ -10,7 +10,6 @@ Or called programmatically from the Streamlit app.
 
 import argparse
 import hashlib
-import json
 import logging
 import sys
 from datetime import datetime
@@ -22,28 +21,22 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from scraper.aws_scraper import AWSScraper
 from scraper.aws_doc_urls import SEED_URLS, TOPIC_KEYWORD_MAP
 from ingestion.chunker import chunk_documents
-from vectorstore.chroma_client import get_collection
+from vectorstore.pg_client import upsert_chunks, get_chunk_count, get_manifest, save_manifest
 from config import DOCS_PATH
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
 UPSERT_BATCH_SIZE = 100
-MANIFEST_PATH = Path(DOCS_PATH) / "manifest.json"
 
 
 def _load_manifest() -> dict:
-    if MANIFEST_PATH.exists():
-        with open(MANIFEST_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return {"last_updated": None, "total_chunks": 0, "sources": {}}
+    return get_manifest()
 
 
 def _save_manifest(manifest: dict) -> None:
-    MANIFEST_PATH.parent.mkdir(parents=True, exist_ok=True)
     manifest["last_updated"] = datetime.now().isoformat()
-    with open(MANIFEST_PATH, "w", encoding="utf-8") as f:
-        json.dump(manifest, f, indent=2)
+    save_manifest(manifest)
 
 
 def _content_hash(docs: list[dict]) -> str:
@@ -93,7 +86,6 @@ def run_ingestion(
         Summary dict {seeds_processed, pages_scraped, chunks_indexed, skipped}
     """
     scraper = AWSScraper()
-    collection = get_collection()
     manifest = _load_manifest()
 
     total = len(seed_keys)
@@ -146,11 +138,7 @@ def run_ingestion(
         # Upsert in batches
         for batch_start in range(0, len(chunks), UPSERT_BATCH_SIZE):
             batch = chunks[batch_start:batch_start + UPSERT_BATCH_SIZE]
-            collection.upsert(
-                ids=[c["id"] for c in batch],
-                documents=[c["document"] for c in batch],
-                metadatas=[c["metadata"] for c in batch],
-            )
+            upsert_chunks(batch)
 
         chunks_indexed += len(chunks)
         logger.info("  Indexed %d chunks for '%s'", len(chunks), name)
@@ -167,7 +155,7 @@ def run_ingestion(
             "content_hash": _content_hash(docs),
         }
 
-    manifest["total_chunks"] = collection.count()
+    manifest["total_chunks"] = get_chunk_count()
     _save_manifest(manifest)
 
     if progress_callback:

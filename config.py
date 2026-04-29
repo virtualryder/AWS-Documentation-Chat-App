@@ -6,8 +6,10 @@ load_dotenv()
 
 # Paths
 BASE_DIR = Path(__file__).parent
-CHROMA_PATH = str(BASE_DIR / "chroma_store")
 DOCS_PATH = str(BASE_DIR / "docs")
+
+# PostgreSQL (Railway injects DATABASE_URL automatically)
+DATABASE_URL = os.getenv("DATABASE_URL", "")
 
 # Anthropic
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")

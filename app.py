@@ -52,7 +52,7 @@ def get_agent():
 
 def refresh_kb_count():
     try:
-        from vectorstore.chroma_client import get_chunk_count
+        from vectorstore.pg_client import get_chunk_count
         st.session_state.kb_count = get_chunk_count()
     except Exception:
         st.session_state.kb_count = 0
@@ -60,15 +60,10 @@ def refresh_kb_count():
 
 def load_manifest() -> dict:
     try:
-        import json
-        from config import DOCS_PATH
-        manifest_path = Path(DOCS_PATH) / "manifest.json"
-        if manifest_path.exists():
-            with open(manifest_path) as f:
-                return json.load(f)
+        from vectorstore.pg_client import get_manifest
+        return get_manifest()
     except Exception:
-        pass
-    return {}
+        return {}
 
 
 def build_full_customer_context() -> str:
