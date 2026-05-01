@@ -252,6 +252,7 @@ class AWSChatAgent:
         user_message: str,
         customer_context: str = "",
         status_callback=None,
+        text_stream_callback=None,
     ) -> str:
         """
         Send a message and return the assistant's full response.
@@ -261,6 +262,8 @@ class AWSChatAgent:
             customer_context: Optional description of the customer's environment.
             status_callback: Optional fn(str) called with status updates.
                 Each call emits one line shown in the UI research log.
+            text_stream_callback: Optional fn(str) called with each text token
+                as it streams from the model on the final synthesis pass.
 
         Returns:
             The assistant's response text.
@@ -296,6 +299,11 @@ class AWSChatAgent:
                 tools=TOOLS,
                 messages=self.history,
             ) as stream:
+                # Stream text tokens live to the UI callback (only fires on
+                # text-content responses; tool-use responses emit nothing here)
+                if text_stream_callback:
+                    for token in stream.text_stream:
+                        text_stream_callback(token)
                 response = stream.get_final_message()
 
             if response.stop_reason == "tool_use":

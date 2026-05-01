@@ -172,13 +172,22 @@ def _refresh_kb_count():
 
 
 def _select_customer(customer_id: str | None) -> None:
-    """Switch to a different customer, clearing conversation state."""
+    """Switch to a different customer, auto-loading their most recent conversation."""
     st.session_state.ws_customer_id = customer_id
     st.session_state.ws_conversation_id = None
     st.session_state.ws_agent = None
     st.session_state.ws_messages = []
     st.session_state.show_edit_customer = False
     st.session_state.confirm_delete_conv = None
+
+    # Auto-load most recent conversation (get_conversations returns newest first)
+    if customer_id:
+        try:
+            convs = _db().get_conversations(customer_id)
+            if convs:
+                _load_conversation(convs[0]["id"])
+        except Exception:
+            pass
 
 
 def _select_conversation(conv_id: str) -> None:
@@ -684,24 +693,46 @@ else:
         agent = st.session_state.ws_agent
         history_len_before = len(agent.history)
         step_count = [0]
+        status_ref = [None]
+        accumulated_text = [""]
 
         with st.chat_message("assistant", avatar="☁️"):
-            with st.status("🔬 Researching AWS documentation…", expanded=True) as research_status:
-                def _status_cb(msg: str):
-                    step_count[0] += 1
-                    st.write(msg)
+            # Placeholder for streaming text — created first so it appears above
+            # the status box, then filled in as tokens arrive during synthesis
+            text_placeholder = st.empty()
 
+            def _text_cb(token: str):
+                accumulated_text[0] += token
+                text_placeholder.markdown(accumulated_text[0] + "▌")
+
+            def _status_cb(msg: str):
+                step_count[0] += 1
+                st.write(msg)
+                # Update the status header to reflect the current phase
+                sr = status_ref[0]
+                if sr is not None:
+                    if "Composing" in msg:
+                        sr.update(label="✍️ Creating your architecture response…")
+                    elif "Fetching" in msg:
+                        sr.update(label="🌐 Retrieving live AWS documentation…")
+                    elif "Searching" in msg:
+                        sr.update(label="🔍 Searching knowledge base…")
+
+            with st.status("🧠 Analyzing your question…", expanded=True) as research_status:
+                status_ref[0] = research_status
                 response = agent.chat(
                     user_message=prompt,
                     customer_context=ctx,
                     status_callback=_status_cb,
+                    text_stream_callback=_text_cb,
                 )
                 research_status.update(
-                    label=f"Research complete — {step_count[0]} steps",
+                    label=f"✅ Research complete — {step_count[0]} steps",
                     state="complete",
                     expanded=False,
                 )
-            st.markdown(response)
+            # Final clean render (removes streaming cursor, proper markdown)
+            text_placeholder.markdown(response)
 
         # Persist the full exchange (all tool turns + final response) to DB
         new_entries = agent.history[history_len_before:]
