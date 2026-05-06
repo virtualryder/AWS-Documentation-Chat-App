@@ -74,6 +74,119 @@ def _init_state():
 _init_state()
 
 
+# ── Stage constants ────────────────────────────────────────────────────────────
+
+STAGE_OPTIONS = ["Prospect", "Active Opportunity", "POC / Pilot", "Closed Won", "Inactive"]
+
+STAGE_COLORS = {
+    "Prospect":           "#6c757d",
+    "Active Opportunity": "#0d6efd",
+    "POC / Pilot":        "#fd7e14",
+    "Closed Won":         "#198754",
+    "Inactive":           "#adb5bd",
+}
+
+STAGE_EMOJI = {
+    "Prospect":           "⬜",
+    "Active Opportunity": "🔵",
+    "POC / Pilot":        "🟠",
+    "Closed Won":         "🟢",
+    "Inactive":           "⚫",
+}
+
+
+# ── Time-ago helper ────────────────────────────────────────────────────────────
+
+def _time_ago(dt) -> str:
+    """Convert a datetime to a human-readable relative string."""
+    from datetime import datetime, timezone
+    if dt is None:
+        return ""
+    now = datetime.now(timezone.utc)
+    if hasattr(dt, "tzinfo") and dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    diff = int((now - dt).total_seconds())
+    if diff < 120:
+        return "just now"
+    if diff < 3600:
+        return f"{diff // 60}m ago"
+    if diff < 86400:
+        return f"{diff // 3600}h ago"
+    if diff < 86400 * 7:
+        return f"{diff // 86400}d ago"
+    return f"{diff // (86400 * 7)}w ago"
+
+
+# ── Copy-to-clipboard button (JavaScript component) ───────────────────────────
+
+def _copy_button(text: str, label: str = "📋 Copy") -> None:
+    import json
+    import streamlit.components.v1 as components
+    escaped = json.dumps(text)
+    components.html(
+        f"""
+        <button
+            onclick="navigator.clipboard.writeText({escaped}).then(
+                () => {{ this.textContent='✅ Copied!';
+                         setTimeout(()=>this.textContent='{label}', 2000); }},
+                () => {{ this.textContent='❌ Failed'; }}
+            )"
+            style="background:#FF9900;color:white;border:none;padding:7px 14px;
+                   border-radius:6px;cursor:pointer;font-size:0.85rem;
+                   width:100%;font-family:sans-serif;font-weight:600;">
+            {label}
+        </button>
+        """,
+        height=42,
+    )
+
+
+# ── Auto-save a discovery brief as a conversation ─────────────────────────────
+
+def _save_brief_as_conversation(
+    db, customer_id: str, customer_name: str,
+    website: str, notes: str, brief_text: str,
+) -> str:
+    """Save a generated brief as a conversation and return the conversation ID."""
+    from datetime import date as _date
+    title = f"🎯 Brief — {_date.today().strftime('%b %d, %Y')}"
+    conv_id = db.create_conversation(customer_id)
+    db.update_conversation_title(conv_id, title[:58])
+
+    parts = [f"Generate a discovery brief for {customer_name}."]
+    if website:
+        parts.append(f"Website: {website}")
+    if notes:
+        parts.append(f"Notes: {notes}")
+    user_msg = "\n".join(parts)
+
+    next_idx = db.get_next_turn_index(conv_id)
+    db.save_messages_batch([
+        {
+            "conversation_id": conv_id,
+            "turn_index":      next_idx,
+            "role":            "user",
+            "message_type":    "text",
+            "content_text":    user_msg,
+            "content_json":    None,
+            "display_content": user_msg,
+            "is_display_turn": True,
+        },
+        {
+            "conversation_id": conv_id,
+            "turn_index":      next_idx + 1,
+            "role":            "assistant",
+            "message_type":    "text",
+            "content_text":    brief_text,
+            "content_json":    None,
+            "display_content": brief_text,
+            "is_display_turn": True,
+        },
+    ])
+    db.bump_conversation(conv_id)
+    return conv_id
+
+
 # ── DB helpers ─────────────────────────────────────────────────────────────────
 
 def _db():
@@ -316,13 +429,13 @@ with st.sidebar:
     if not all_customers:
         st.caption("No customers yet. Click ＋ to create one.")
     else:
-        # Scrollable list — height grows with content up to ~400 px
-        scroll_h = min(len(all_customers) * 46 + 12, 400)
+        # Each customer row = button (~38px) + caption (~22px) + gap (~4px) ≈ 64px
+        scroll_h = min(len(all_customers) * 64 + 12, 460)
         with st.container(height=scroll_h, border=False):
             for c in all_customers:
                 is_sel   = c["id"] == cid
                 btn_type = "primary" if is_sel else "secondary"
-                label    = ("▶ " if is_sel else "   ") + c["name"]
+                label    = ("▶ " if is_sel else "") + c["name"]
                 if st.button(
                     label,
                     key=f"cust_sidebar_{c['id']}",
@@ -333,11 +446,17 @@ with st.sidebar:
                     if not is_sel:
                         _select_customer(c["id"])
                     else:
-                        # Re-clicking the active customer → go back to profile
                         st.session_state.ws_conversation_id = None
                         st.session_state.ws_agent           = None
                         st.session_state.ws_messages        = []
                     st.rerun()
+                stage = c.get("stage", "Prospect")
+                emoji = STAGE_EMOJI.get(stage, "⬜")
+                last_active = c.get("last_active_at")
+                meta = f"{emoji} {stage}"
+                if last_active:
+                    meta += f" · {_time_ago(last_active)}"
+                st.caption(meta)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -363,6 +482,7 @@ if st.session_state.show_new_customer:
     with st.form("new_customer_form"):
         name     = st.text_input("Company / Customer name *", placeholder="Acme Corp")
         industry = st.text_input("Industry", placeholder="e.g. Retail, Healthcare, Financial Services")
+        stage    = st.selectbox("Opportunity Stage", STAGE_OPTIONS, index=0)
         arch_ctx = st.text_area(
             "Current architecture context",
             height=200,
@@ -382,7 +502,7 @@ if st.session_state.show_new_customer:
         if not name.strip():
             st.error("Customer name is required.")
         else:
-            new_id = db.create_customer(name, industry, arch_ctx)
+            new_id = db.create_customer(name, industry, arch_ctx, stage)
             st.session_state.show_new_customer = False
             _select_customer(new_id)
             st.rerun()
@@ -420,8 +540,13 @@ elif cvid is None:
 
     # Header
     hdr_col, edit_col, del_col = st.columns([6, 1, 1])
+    stage      = customer.get("stage", "Prospect")
+    stage_color = STAGE_COLORS.get(stage, "#6c757d")
     hdr_col.markdown(
-        f"<h2 style='margin:0'>{customer['name']}</h2>",
+        f"<h2 style='margin:0'>{customer['name']} "
+        f"<span style='background:{stage_color};color:white;padding:2px 10px;"
+        f"border-radius:12px;font-size:0.55em;vertical-align:middle;"
+        f"font-weight:600;letter-spacing:0.03em'>{stage}</span></h2>",
         unsafe_allow_html=True,
     )
     if customer.get("industry"):
@@ -451,6 +576,12 @@ elif cvid is None:
             st.markdown("**Edit Customer Profile**")
             new_name     = st.text_input("Name",     value=customer["name"])
             new_industry = st.text_input("Industry", value=customer.get("industry", ""))
+            cur_stage    = customer.get("stage", "Prospect")
+            new_stage    = st.selectbox(
+                "Opportunity Stage",
+                STAGE_OPTIONS,
+                index=STAGE_OPTIONS.index(cur_stage) if cur_stage in STAGE_OPTIONS else 0,
+            )
             new_ctx      = st.text_area(
                 "Architecture Context",
                 value=customer.get("arch_context", ""),
@@ -458,7 +589,7 @@ elif cvid is None:
             )
             s1, s2 = st.columns(2)
             if s1.form_submit_button("Save Changes", type="primary", use_container_width=True):
-                db.update_customer(cid, new_name, new_industry, new_ctx)
+                db.update_customer(cid, new_name, new_industry, new_ctx, new_stage)
                 st.session_state.show_edit_customer = False
                 st.rerun()
             if s2.form_submit_button("Cancel", use_container_width=True):
@@ -570,123 +701,128 @@ elif cvid is None:
 
     # ── Tab 2: Discovery Brief ─────────────────────────────────────────────────
     with tab_brief:
-        st.markdown("**Pre-Call Discovery Brief**")
-        st.caption(
-            "Researches the company via live web search + AWS knowledge base and produces "
-            "a Presidio-branded call-prep document with personas, pain points, use-case "
-            "hypotheses, discovery questions, and a recommended meeting agenda."
-        )
-        st.markdown("")
+        brief_left, brief_right = st.columns([2, 3], gap="large")
 
-        disc_website = st.text_input(
-            "Company website",
-            placeholder="https://www.example.com",
-            key=f"disc_website_{cid}",
-        )
-        disc_notes = st.text_area(
-            "Call notes / additional context",
-            placeholder=(
-                "e.g. CTO and CISO will be on the call.\n"
-                "500-person company, Series C, currently on-prem evaluating cloud.\n"
-                "Mentioned interest in containerization and cost reduction."
-            ),
-            height=110,
-            key=f"disc_notes_{cid}",
-        )
+        with brief_left:
+            st.markdown("**Generate New Brief**")
+            st.caption("Tavily web search + AWS knowledge base → Presidio call-prep doc")
 
-        generate_btn = st.button(
-            "🎯 Generate Discovery Brief",
-            type="primary",
-            use_container_width=True,
-            key=f"gen_brief_{cid}",
-        )
-
-        if generate_btn:
-            from agent.discovery_agent import DiscoveryAgent
-            da = DiscoveryAgent()
-
-            step_count = [0]
-            accumulated_text = [""]
-
-            with st.chat_message("assistant", avatar="🎯"):
-                text_placeholder = st.empty()
-
-                def _disc_text_cb(token: str):
-                    accumulated_text[0] += token
-                    text_placeholder.markdown(accumulated_text[0] + "▌")
-
-                def _disc_status_cb(msg: str):
-                    step_count[0] += 1
-                    st.write(msg)
-
-                with st.status("🔍 Researching company…", expanded=True) as brief_status:
-                    brief_text = da.generate_brief(
-                        customer_name=customer["name"],
-                        industry=customer.get("industry", ""),
-                        website=disc_website,
-                        notes=disc_notes,
-                        arch_context=customer.get("arch_context", ""),
-                        status_callback=_disc_status_cb,
-                        text_stream_callback=_disc_text_cb,
-                    )
-                    brief_status.update(
-                        label=f"✅ Brief complete — {step_count[0]} research steps",
-                        state="complete",
-                        expanded=False,
-                    )
-                text_placeholder.markdown(brief_text)
-
-            st.session_state.discovery_results[cid] = {
-                "text":    brief_text,
-                "website": disc_website,
-                "notes":   disc_notes,
-            }
-
-        # Show the most recently generated brief for this customer
-        saved_brief = st.session_state.discovery_results.get(cid)
-        if saved_brief and not generate_btn:
-            st.markdown(saved_brief["text"])
+            disc_website = st.text_input(
+                "Company website",
+                placeholder="https://www.example.com",
+                key=f"disc_website_{cid}",
+            )
+            disc_notes = st.text_area(
+                "Call notes / context",
+                placeholder=(
+                    "e.g. CTO + CISO on the call.\n"
+                    "500 employees, Series C, on-prem.\n"
+                    "Interested in containers + cost reduction."
+                ),
+                height=100,
+                key=f"disc_notes_{cid}",
+            )
+            generate_btn = st.button(
+                "🎯 Generate Brief",
+                type="primary",
+                use_container_width=True,
+                key=f"gen_brief_{cid}",
+            )
 
             st.divider()
-            if st.button("💾 Save as Conversation", key=f"save_brief_{cid}", use_container_width=True):
-                from datetime import date as _date
-                title = f"Discovery Brief — {customer['name']}"[:58]
-                new_cvid = db.create_conversation(cid)
-                db.update_conversation_title(new_cvid, title)
+            st.markdown("**Saved Briefs**")
 
-                user_msg_parts = [f"Generate a discovery brief for {customer['name']}."]
-                if saved_brief.get("website"):
-                    user_msg_parts.append(f"Website: {saved_brief['website']}")
-                if saved_brief.get("notes"):
-                    user_msg_parts.append(f"Notes: {saved_brief['notes']}")
-                user_msg = "\n".join(user_msg_parts)
+            try:
+                all_convs_brief = db.get_conversations(cid)
+                past_briefs = [c for c in all_convs_brief if c["title"].startswith("🎯 Brief")]
+            except Exception:
+                past_briefs = []
 
-                next_idx = db.get_next_turn_index(new_cvid)
-                db.save_messages_batch([
-                    {
-                        "conversation_id": new_cvid,
-                        "turn_index":      next_idx,
-                        "role":            "user",
-                        "message_type":    "text",
-                        "content_text":    user_msg,
-                        "content_json":    None,
-                        "display_content": user_msg,
-                        "is_display_turn": True,
-                    },
-                    {
-                        "conversation_id": new_cvid,
-                        "turn_index":      next_idx + 1,
-                        "role":            "assistant",
-                        "message_type":    "text",
-                        "content_text":    saved_brief["text"],
-                        "content_json":    None,
-                        "display_content": saved_brief["text"],
-                        "is_display_turn": True,
-                    },
-                ])
-                db.bump_conversation(new_cvid)
-                _load_conversation(new_cvid)
-                st.rerun()
+            if not past_briefs:
+                st.caption("No briefs yet — generate one above.")
+            else:
+                for pb in past_briefs:
+                    pb_ts = pb["updated_at"]
+                    pb_label = pb["title"]
+                    if st.button(pb_label, key=f"load_brief_{pb['id']}", use_container_width=True):
+                        msgs = db.get_messages(pb["id"])
+                        for m in msgs:
+                            if m["role"] == "assistant" and m["is_display_turn"]:
+                                st.session_state.discovery_results[cid] = {
+                                    "text": m["display_content"],
+                                    "conv_id": pb["id"],
+                                }
+                                break
+                        st.rerun()
+                    st.caption(_time_ago(pb_ts))
+
+        with brief_right:
+            if generate_btn:
+                from agent.discovery_agent import DiscoveryAgent
+                da = DiscoveryAgent()
+                step_count = [0]
+                accumulated_text = [""]
+
+                with st.chat_message("assistant", avatar="🎯"):
+                    text_placeholder = st.empty()
+
+                    def _disc_text_cb(token: str):
+                        accumulated_text[0] += token
+                        text_placeholder.markdown(accumulated_text[0] + "▌")
+
+                    def _disc_status_cb(msg: str):
+                        step_count[0] += 1
+                        st.write(msg)
+
+                    with st.status("🔍 Researching company…", expanded=True) as brief_status:
+                        brief_text = da.generate_brief(
+                            customer_name=customer["name"],
+                            industry=customer.get("industry", ""),
+                            website=disc_website,
+                            notes=disc_notes,
+                            arch_context=customer.get("arch_context", ""),
+                            status_callback=_disc_status_cb,
+                            text_stream_callback=_disc_text_cb,
+                        )
+                        brief_status.update(
+                            label=f"✅ Brief complete — {step_count[0]} research steps",
+                            state="complete",
+                            expanded=False,
+                        )
+                    text_placeholder.markdown(brief_text)
+
+                # Auto-save and store in session
+                saved_conv_id = _save_brief_as_conversation(
+                    db, cid, customer["name"], disc_website, disc_notes, brief_text
+                )
+                st.session_state.discovery_results[cid] = {
+                    "text": brief_text,
+                    "conv_id": saved_conv_id,
+                }
+                st.caption("✅ Brief auto-saved to Conversations.")
+
+            saved_brief = st.session_state.discovery_results.get(cid)
+            if saved_brief and not generate_btn:
+                dl_col, cp_col = st.columns(2)
+                with dl_col:
+                    safe_name = customer["name"].replace(" ", "_")
+                    st.download_button(
+                        "⬇️ Download .md",
+                        data=saved_brief["text"],
+                        file_name=f"discovery_brief_{safe_name}.md",
+                        mime="text/markdown",
+                        use_container_width=True,
+                        key=f"dl_brief_{cid}",
+                    )
+                with cp_col:
+                    _copy_button(saved_brief["text"])
+                st.divider()
+                st.markdown(saved_brief["text"])
+            elif not generate_btn:
+                st.info(
+                    "Fill in the company website and any call notes on the left, "
+                    "then click **🎯 Generate Brief** to create your pre-call document."
+                )
 
 # ── Active conversation ────────────────────────────────────────────────────────
 else:

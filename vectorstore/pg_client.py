@@ -289,6 +289,10 @@ def _init_customer_schema(conn: psycopg2.extensions.connection) -> None:
                 updated_at   TIMESTAMPTZ DEFAULT NOW()
             )
         """)
+        # Migrate: add stage column to existing customers tables
+        cur.execute("""
+            ALTER TABLE customers ADD COLUMN IF NOT EXISTS stage TEXT DEFAULT 'Prospect'
+        """)
         cur.execute("""
             CREATE INDEX IF NOT EXISTS customers_name_idx
             ON customers (name)
@@ -349,13 +353,13 @@ def _init_customer_schema(conn: psycopg2.extensions.connection) -> None:
 
 # ── Customer CRUD ─────────────────────────────────────────────────────────────
 
-def create_customer(name: str, industry: str = "", arch_context: str = "") -> str:
+def create_customer(name: str, industry: str = "", arch_context: str = "", stage: str = "Prospect") -> str:
     customer_id = str(uuid.uuid4())
     conn = _get_conn()
     with conn.cursor() as cur:
         cur.execute(
-            "INSERT INTO customers (id, name, industry, arch_context) VALUES (%s, %s, %s, %s)",
-            (customer_id, name.strip(), industry.strip(), arch_context.strip()),
+            "INSERT INTO customers (id, name, industry, arch_context, stage) VALUES (%s, %s, %s, %s, %s)",
+            (customer_id, name.strip(), industry.strip(), arch_context.strip(), stage),
         )
     conn.commit()
     return customer_id
@@ -365,13 +369,23 @@ def get_customers() -> list[dict]:
     conn = _get_conn()
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT id, name, industry, arch_context, created_at, updated_at "
-            "FROM customers ORDER BY name ASC"
+            """
+            SELECT c.id, c.name, c.industry, c.arch_context,
+                   COALESCE(c.stage, 'Prospect') AS stage,
+                   c.created_at, c.updated_at,
+                   (SELECT MAX(updated_at) FROM conversations
+                    WHERE customer_id = c.id) AS last_active_at
+            FROM customers c
+            ORDER BY COALESCE(
+                (SELECT MAX(updated_at) FROM conversations WHERE customer_id = c.id),
+                c.created_at
+            ) DESC
+            """
         )
         rows = cur.fetchall()
     return [
-        {"id": r[0], "name": r[1], "industry": r[2],
-         "arch_context": r[3], "created_at": r[4], "updated_at": r[5]}
+        {"id": r[0], "name": r[1], "industry": r[2], "arch_context": r[3],
+         "stage": r[4], "created_at": r[5], "updated_at": r[6], "last_active_at": r[7]}
         for r in rows
     ]
 
@@ -380,7 +394,8 @@ def get_customer(customer_id: str) -> dict | None:
     conn = _get_conn()
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT id, name, industry, arch_context, created_at, updated_at "
+            "SELECT id, name, industry, arch_context, "
+            "COALESCE(stage, 'Prospect') AS stage, created_at, updated_at "
             "FROM customers WHERE id = %s",
             (customer_id,),
         )
@@ -388,16 +403,16 @@ def get_customer(customer_id: str) -> dict | None:
     if not row:
         return None
     return {"id": row[0], "name": row[1], "industry": row[2],
-            "arch_context": row[3], "created_at": row[4], "updated_at": row[5]}
+            "arch_context": row[3], "stage": row[4], "created_at": row[5], "updated_at": row[6]}
 
 
-def update_customer(customer_id: str, name: str, industry: str, arch_context: str) -> None:
+def update_customer(customer_id: str, name: str, industry: str, arch_context: str, stage: str = "Prospect") -> None:
     conn = _get_conn()
     with conn.cursor() as cur:
         cur.execute(
-            "UPDATE customers SET name=%s, industry=%s, arch_context=%s, updated_at=NOW() "
+            "UPDATE customers SET name=%s, industry=%s, arch_context=%s, stage=%s, updated_at=NOW() "
             "WHERE id=%s",
-            (name.strip(), industry.strip(), arch_context.strip(), customer_id),
+            (name.strip(), industry.strip(), arch_context.strip(), stage, customer_id),
         )
     conn.commit()
 
