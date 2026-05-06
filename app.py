@@ -27,10 +27,28 @@ logging.basicConfig(level=logging.INFO)
 # ── Custom CSS ─────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-/* Remove excess top padding */
-.block-container { padding-top: 1rem !important; }
-/* Left-align sidebar buttons */
+/* Push main content below Streamlit's native toolbar (~52 px).
+   1rem was too small and caused the first row to slide under the toolbar. */
+.block-container {
+    padding-top: 3.75rem !important;
+    padding-left: 2rem !important;
+    padding-right: 2rem !important;
+    max-width: 1400px !important;
+}
+/* Tighter sidebar so more customers fit without scrolling */
 section[data-testid="stSidebar"] button { text-align: left !important; }
+section[data-testid="stSidebar"] .block-container {
+    padding-top: 0.5rem !important;
+}
+/* Subtle AWS-orange accent on active tab */
+button[data-baseweb="tab"][aria-selected="true"] {
+    border-bottom: 3px solid #FF9900 !important;
+    font-weight: 600 !important;
+}
+/* Make metric labels a little smaller so the sidebar stays compact */
+section[data-testid="stSidebar"] [data-testid="stMetricLabel"] {
+    font-size: 0.75rem !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
