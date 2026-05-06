@@ -37,6 +37,8 @@ def execute_tool(name: str, tool_input: dict) -> str:
         return _search_knowledge_base(tool_input)
     elif name == "fetch_aws_page":
         return _fetch_aws_page(tool_input)
+    elif name == "search_web":
+        return _search_web(tool_input)
     else:
         return f"Unknown tool: {name}"
 
@@ -74,6 +76,54 @@ def _search_knowledge_base(tool_input: dict) -> str:
         content = r["content"]
         if len(content) > 2000:
             content = content[:2000] + "\n[... truncated ...]"
+        lines.append(content)
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def _search_web(tool_input: dict) -> str:
+    """Search the public web via Tavily and return a formatted results string."""
+    from config import TAVILY_API_KEY
+
+    query = tool_input.get("query", "").strip()
+    max_results = min(int(tool_input.get("max_results", 5)), 10)
+
+    if not query:
+        return "Error: query parameter is required."
+
+    if not TAVILY_API_KEY:
+        return (
+            "Tavily API key is not configured. "
+            "Add TAVILY_API_KEY to your environment variables to enable web search."
+        )
+
+    try:
+        from tavily import TavilyClient
+        client = TavilyClient(api_key=TAVILY_API_KEY)
+        response = client.search(
+            query,
+            search_depth="advanced",
+            max_results=max_results,
+        )
+    except Exception as exc:
+        logger.error("Tavily search failed: %s", exc)
+        return f"Web search failed: {exc}"
+
+    results = response.get("results", [])
+    if not results:
+        return f"No web results found for: {query}"
+
+    lines = [f"Found {len(results)} web results for: \"{query}\"\n"]
+    for i, r in enumerate(results, 1):
+        lines.append(f"--- Result {i} ---")
+        lines.append(f"Title: {r.get('title', 'No title')}")
+        lines.append(f"URL: {r.get('url', '')}")
+        lines.append(f"Score: {r.get('score', 0):.2f}")
+        lines.append("")
+        content = r.get("content", "")
+        if len(content) > 1500:
+            content = content[:1500] + "\n[... truncated ...]"
         lines.append(content)
         lines.append("")
 

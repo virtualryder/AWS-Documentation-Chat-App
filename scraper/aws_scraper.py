@@ -64,7 +64,9 @@ class AWSScraper:
         """
         self._rate_limit()
         try:
-            resp = self.session.get(url, timeout=REQUEST_TIMEOUT)
+            # Separate connect vs. read timeout: (connect_seconds, read_seconds)
+            # Using a single integer lets slow servers dribble data and never trigger the timeout.
+            resp = self.session.get(url, timeout=(10, REQUEST_TIMEOUT))
             resp.raise_for_status()
         except requests.RequestException as exc:
             logger.warning("Failed to fetch %s: %s", url, exc)

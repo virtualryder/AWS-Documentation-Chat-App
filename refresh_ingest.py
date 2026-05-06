@@ -33,6 +33,7 @@ How to set up the Railway Cron service
 import argparse
 import logging
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -49,7 +50,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_AGE_DAYS = 7
-PAGES_PER_SERVICE = 20
+PAGES_PER_SERVICE = 10          # keep the weekly job under ~5 minutes on Railway
+MAX_RUNTIME_SECONDS = 480       # bail out gracefully after 8 minutes
 
 
 def parse_args() -> argparse.Namespace:
@@ -140,7 +142,12 @@ def main() -> None:
     logger.info("")
     logger.info("=" * 60)
     logger.info("Starting refresh of %d service(s)...", len(stale_keys))
+    logger.info("Max runtime: %d seconds", MAX_RUNTIME_SECONDS)
     logger.info("=" * 60)
+
+    job_start = time.monotonic()
+    processed_keys: list[str] = []
+    skipped_timeout: list[str] = []
 
     def progress(message: str, current: int, total: int) -> None:
         if total > 0:
@@ -150,16 +157,35 @@ def main() -> None:
         else:
             logger.info("%s", message)
 
-    try:
-        summary = run_ingestion(
-            seed_keys=stale_keys,
-            max_pages_per_seed=PAGES_PER_SERVICE,
-            save_to_disk=False,
-            progress_callback=progress,
-        )
-    except Exception as exc:
-        logger.error("Refresh failed: %s", exc, exc_info=True)
-        sys.exit(1)
+    # Process one service at a time so we can honour the runtime cap
+    for key in stale_keys:
+        elapsed = time.monotonic() - job_start
+        if elapsed >= MAX_RUNTIME_SECONDS:
+            remaining = stale_keys[stale_keys.index(key):]
+            skipped_timeout.extend(remaining)
+            logger.warning(
+                "Runtime cap reached (%.0fs). Skipping %d remaining service(s): %s",
+                elapsed,
+                len(remaining),
+                ", ".join(remaining),
+            )
+            break
+
+        logger.info("Processing: %s  (%.0fs elapsed)", key, elapsed)
+        try:
+            summary = run_ingestion(
+                seed_keys=[key],
+                max_pages_per_seed=PAGES_PER_SERVICE,
+                save_to_disk=False,
+                progress_callback=progress,
+            )
+            processed_keys.append(key)
+        except Exception as exc:
+            logger.error("Failed to refresh %s: %s", key, exc, exc_info=True)
+
+    # Build a combined summary for the final log
+    summary = {"seeds_processed": len(processed_keys), "pages_scraped": 0,
+               "chunks_indexed": 0, "skipped": skipped_timeout}
 
     logger.info("")
     logger.info("=" * 60)

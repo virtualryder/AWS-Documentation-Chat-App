@@ -47,6 +47,7 @@ def _init_state():
         "show_edit_customer":  False,
         "confirm_delete_conv": None,
         "confirm_delete_cust": False,
+        "discovery_results":   {},   # {customer_id: {"text": ..., "website": ..., "notes": ...}}
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -448,105 +449,226 @@ elif cvid is None:
 
     st.divider()
 
-    # Two-column layout: conversations | context + docs
-    conv_col, detail_col = st.columns([3, 2], gap="large")
+    tab_conv, tab_brief = st.tabs(["💬 Conversations", "🎯 Discovery Brief"])
 
-    with conv_col:
-        st.markdown("**Conversations**")
+    # ── Tab 1: Conversations + context/docs ───────────────────────────────────
+    with tab_conv:
+        conv_col, detail_col = st.columns([3, 2], gap="large")
 
-        if st.button("＋ Start New Conversation", type="primary", use_container_width=True):
-            new_cvid = db.create_conversation(cid)
-            _load_conversation(new_cvid)
-            st.rerun()
+        with conv_col:
+            st.markdown("**Conversations**")
 
-        st.markdown("")
+            if st.button("＋ Start New Conversation", type="primary", use_container_width=True):
+                new_cvid = db.create_conversation(cid)
+                _load_conversation(new_cvid)
+                st.rerun()
 
-        try:
-            convs = db.get_conversations(cid)
-        except Exception:
-            convs = []
+            st.markdown("")
 
-        if not convs:
-            st.caption("No conversations yet. Start one above.")
-        else:
-            for conv in convs:
-                with st.container(border=True):
-                    updated = conv["updated_at"]
-                    ts = updated.strftime("%b %d, %Y") if hasattr(updated, "strftime") else str(updated)[:10]
+            try:
+                convs = db.get_conversations(cid)
+            except Exception:
+                convs = []
 
-                    if st.session_state.confirm_delete_conv == conv["id"]:
-                        st.warning(f"Delete **{conv['title']}**?")
-                        y_col, n_col = st.columns(2)
-                        if y_col.button("Yes, delete", key=f"del_yes_{conv['id']}", use_container_width=True):
-                            db.delete_conversation(conv["id"])
-                            st.session_state.confirm_delete_conv = None
-                            st.rerun()
-                        if n_col.button("Cancel", key=f"del_no_{conv['id']}", use_container_width=True):
-                            st.session_state.confirm_delete_conv = None
-                            st.rerun()
-                    else:
-                        title_col, open_col, del_col2 = st.columns([4, 2, 1])
-                        title_col.markdown(f"**{conv['title']}**")
-                        title_col.caption(ts)
-                        if open_col.button("Open →", key=f"open_conv_{conv['id']}", use_container_width=True):
-                            _load_conversation(conv["id"])
-                            st.rerun()
-                        if del_col2.button("✕", key=f"del_{conv['id']}", use_container_width=True):
-                            st.session_state.confirm_delete_conv = conv["id"]
-                            st.rerun()
+            if not convs:
+                st.caption("No conversations yet. Start one above.")
+            else:
+                for conv in convs:
+                    with st.container(border=True):
+                        updated = conv["updated_at"]
+                        ts = updated.strftime("%b %d, %Y") if hasattr(updated, "strftime") else str(updated)[:10]
 
-    with detail_col:
-        # Architecture context (read-only)
-        st.markdown("**Architecture Context**")
-        ctx_text = (customer.get("arch_context") or "").strip()
-        if ctx_text:
-            st.text_area(
-                "ctx_view",
-                value=ctx_text,
-                height=200,
-                disabled=True,
+                        if st.session_state.confirm_delete_conv == conv["id"]:
+                            st.warning(f"Delete **{conv['title']}**?")
+                            y_col, n_col = st.columns(2)
+                            if y_col.button("Yes, delete", key=f"del_yes_{conv['id']}", use_container_width=True):
+                                db.delete_conversation(conv["id"])
+                                st.session_state.confirm_delete_conv = None
+                                st.rerun()
+                            if n_col.button("Cancel", key=f"del_no_{conv['id']}", use_container_width=True):
+                                st.session_state.confirm_delete_conv = None
+                                st.rerun()
+                        else:
+                            title_col, open_col, del_col2 = st.columns([4, 2, 1])
+                            title_col.markdown(f"**{conv['title']}**")
+                            title_col.caption(ts)
+                            if open_col.button("Open →", key=f"open_conv_{conv['id']}", use_container_width=True):
+                                _load_conversation(conv["id"])
+                                st.rerun()
+                            if del_col2.button("✕", key=f"del_{conv['id']}", use_container_width=True):
+                                st.session_state.confirm_delete_conv = conv["id"]
+                                st.rerun()
+
+        with detail_col:
+            st.markdown("**Architecture Context**")
+            ctx_text = (customer.get("arch_context") or "").strip()
+            if ctx_text:
+                st.text_area(
+                    "ctx_view",
+                    value=ctx_text,
+                    height=200,
+                    disabled=True,
+                    label_visibility="collapsed",
+                )
+            else:
+                st.caption("No architecture context yet. Click ✏️ Edit to add one.")
+
+            st.divider()
+
+            st.markdown("**Customer Documents**")
+            st.caption("Active docs are injected into every conversation for this customer.")
+
+            docs = db.get_customer_documents(cid)
+            if docs:
+                for doc in docs:
+                    d1, d2, d3 = st.columns([5, 1, 1])
+                    icon = "✅" if doc["is_active"] else "⬜"
+                    d1.caption(f"{icon} {doc['filename']} ({doc['char_count']:,} chars)")
+                    if d2.button(
+                        "On" if doc["is_active"] else "Off",
+                        key=f"tog_{doc['id']}",
+                        help="Toggle",
+                        use_container_width=True,
+                    ):
+                        db.toggle_customer_document(doc["id"], not doc["is_active"])
+                        st.rerun()
+                    if d3.button("✕", key=f"deldoc_{doc['id']}", use_container_width=True):
+                        db.delete_customer_document(doc["id"])
+                        st.rerun()
+
+            uploaded_files = st.file_uploader(
+                "Upload files",
+                type=["pdf", "docx", "txt", "md"],
+                accept_multiple_files=True,
                 label_visibility="collapsed",
             )
-        else:
-            st.caption("No architecture context yet. Click ✏️ Edit to add one.")
+            if uploaded_files:
+                from ingestion.document_parser import extract_text
+                for f in uploaded_files:
+                    text = extract_text(f.read(), f.name)
+                    db.save_customer_document(cid, f.name, text)
+                st.success(f"{len(uploaded_files)} file(s) saved to this workspace.")
+                st.rerun()
 
-        st.divider()
-
-        # Documents
-        st.markdown("**Customer Documents**")
-        st.caption("Active docs are injected into every conversation for this customer.")
-
-        docs = db.get_customer_documents(cid)
-        if docs:
-            for doc in docs:
-                d1, d2, d3 = st.columns([5, 1, 1])
-                icon = "✅" if doc["is_active"] else "⬜"
-                d1.caption(f"{icon} {doc['filename']} ({doc['char_count']:,} chars)")
-                if d2.button(
-                    "On" if doc["is_active"] else "Off",
-                    key=f"tog_{doc['id']}",
-                    help="Toggle",
-                    use_container_width=True,
-                ):
-                    db.toggle_customer_document(doc["id"], not doc["is_active"])
-                    st.rerun()
-                if d3.button("✕", key=f"deldoc_{doc['id']}", use_container_width=True):
-                    db.delete_customer_document(doc["id"])
-                    st.rerun()
-
-        uploaded_files = st.file_uploader(
-            "Upload files",
-            type=["pdf", "docx", "txt", "md"],
-            accept_multiple_files=True,
-            label_visibility="collapsed",
+    # ── Tab 2: Discovery Brief ─────────────────────────────────────────────────
+    with tab_brief:
+        st.markdown("**Pre-Call Discovery Brief**")
+        st.caption(
+            "Researches the company via live web search + AWS knowledge base and produces "
+            "a Presidio-branded call-prep document with personas, pain points, use-case "
+            "hypotheses, discovery questions, and a recommended meeting agenda."
         )
-        if uploaded_files:
-            from ingestion.document_parser import extract_text
-            for f in uploaded_files:
-                text = extract_text(f.read(), f.name)
-                db.save_customer_document(cid, f.name, text)
-            st.success(f"{len(uploaded_files)} file(s) saved to this workspace.")
-            st.rerun()
+        st.markdown("")
+
+        disc_website = st.text_input(
+            "Company website",
+            placeholder="https://www.example.com",
+            key=f"disc_website_{cid}",
+        )
+        disc_notes = st.text_area(
+            "Call notes / additional context",
+            placeholder=(
+                "e.g. CTO and CISO will be on the call.\n"
+                "500-person company, Series C, currently on-prem evaluating cloud.\n"
+                "Mentioned interest in containerization and cost reduction."
+            ),
+            height=110,
+            key=f"disc_notes_{cid}",
+        )
+
+        generate_btn = st.button(
+            "🎯 Generate Discovery Brief",
+            type="primary",
+            use_container_width=True,
+            key=f"gen_brief_{cid}",
+        )
+
+        if generate_btn:
+            from agent.discovery_agent import DiscoveryAgent
+            da = DiscoveryAgent()
+
+            step_count = [0]
+            accumulated_text = [""]
+
+            with st.chat_message("assistant", avatar="🎯"):
+                text_placeholder = st.empty()
+
+                def _disc_text_cb(token: str):
+                    accumulated_text[0] += token
+                    text_placeholder.markdown(accumulated_text[0] + "▌")
+
+                def _disc_status_cb(msg: str):
+                    step_count[0] += 1
+                    st.write(msg)
+
+                with st.status("🔍 Researching company…", expanded=True) as brief_status:
+                    brief_text = da.generate_brief(
+                        customer_name=customer["name"],
+                        industry=customer.get("industry", ""),
+                        website=disc_website,
+                        notes=disc_notes,
+                        arch_context=customer.get("arch_context", ""),
+                        status_callback=_disc_status_cb,
+                        text_stream_callback=_disc_text_cb,
+                    )
+                    brief_status.update(
+                        label=f"✅ Brief complete — {step_count[0]} research steps",
+                        state="complete",
+                        expanded=False,
+                    )
+                text_placeholder.markdown(brief_text)
+
+            st.session_state.discovery_results[cid] = {
+                "text":    brief_text,
+                "website": disc_website,
+                "notes":   disc_notes,
+            }
+
+        # Show the most recently generated brief for this customer
+        saved_brief = st.session_state.discovery_results.get(cid)
+        if saved_brief and not generate_btn:
+            st.markdown(saved_brief["text"])
+
+            st.divider()
+            if st.button("💾 Save as Conversation", key=f"save_brief_{cid}", use_container_width=True):
+                from datetime import date as _date
+                title = f"Discovery Brief — {customer['name']}"[:58]
+                new_cvid = db.create_conversation(cid)
+                db.update_conversation_title(new_cvid, title)
+
+                user_msg_parts = [f"Generate a discovery brief for {customer['name']}."]
+                if saved_brief.get("website"):
+                    user_msg_parts.append(f"Website: {saved_brief['website']}")
+                if saved_brief.get("notes"):
+                    user_msg_parts.append(f"Notes: {saved_brief['notes']}")
+                user_msg = "\n".join(user_msg_parts)
+
+                next_idx = db.get_next_turn_index(new_cvid)
+                db.save_messages_batch([
+                    {
+                        "conversation_id": new_cvid,
+                        "turn_index":      next_idx,
+                        "role":            "user",
+                        "message_type":    "text",
+                        "content_text":    user_msg,
+                        "content_json":    None,
+                        "display_content": user_msg,
+                        "is_display_turn": True,
+                    },
+                    {
+                        "conversation_id": new_cvid,
+                        "turn_index":      next_idx + 1,
+                        "role":            "assistant",
+                        "message_type":    "text",
+                        "content_text":    saved_brief["text"],
+                        "content_json":    None,
+                        "display_content": saved_brief["text"],
+                        "is_display_turn": True,
+                    },
+                ])
+                db.bump_conversation(new_cvid)
+                _load_conversation(new_cvid)
+                st.rerun()
 
 # ── Active conversation ────────────────────────────────────────────────────────
 else:
