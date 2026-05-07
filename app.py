@@ -429,13 +429,18 @@ with st.sidebar:
     if not all_customers:
         st.caption("No customers yet. Click ＋ to create one.")
     else:
-        # Each customer row = button (~38px) + caption (~22px) + gap (~4px) ≈ 64px
-        scroll_h = min(len(all_customers) * 64 + 12, 460)
+        # Single button row per customer (~46px each)
+        scroll_h = min(len(all_customers) * 46 + 12, 400)
         with st.container(height=scroll_h, border=False):
             for c in all_customers:
-                is_sel   = c["id"] == cid
-                btn_type = "primary" if is_sel else "secondary"
-                label    = ("▶ " if is_sel else "") + c["name"]
+                is_sel      = c["id"] == cid
+                btn_type    = "primary" if is_sel else "secondary"
+                stage       = c.get("stage", "Prospect")
+                emoji       = STAGE_EMOJI.get(stage, "⬜")
+                last_active = c.get("last_active_at")
+                time_str    = f" · {_time_ago(last_active)}" if last_active else ""
+                prefix      = "▶ " if is_sel else ""
+                label       = f"{prefix}{c['name']}  {emoji}{time_str}"
                 if st.button(
                     label,
                     key=f"cust_sidebar_{c['id']}",
@@ -450,13 +455,6 @@ with st.sidebar:
                         st.session_state.ws_agent           = None
                         st.session_state.ws_messages        = []
                     st.rerun()
-                stage = c.get("stage", "Prospect")
-                emoji = STAGE_EMOJI.get(stage, "⬜")
-                last_active = c.get("last_active_at")
-                meta = f"{emoji} {stage}"
-                if last_active:
-                    meta += f" · {_time_ago(last_active)}"
-                st.caption(meta)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
